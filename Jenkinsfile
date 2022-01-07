@@ -52,6 +52,30 @@ pipeline {
 				}
 			}
 			parallel {
+				stage("test: H2 2.0 (jdk8)") {
+					agent {
+						label 'data'
+					}
+					options { timeout(time: 30, unit: 'MINUTES') }
+
+					environment {
+						DOCKER_HUB = credentials('hub.docker.com-springbuildmaster')
+						ARTIFACTORY = credentials('02bd1690-b54f-4c9f-819d-a77cb7a9822c')
+					}
+
+					steps {
+						script {
+							docker.withRegistry('', 'hub.docker.com-springbuildmaster') {
+								docker.image('adoptopenjdk/openjdk8:latest').inside('-u root -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker -v $HOME:/tmp/jenkins-home') {
+									sh "docker login --username ${DOCKER_HUB_USR} --password ${DOCKER_HUB_PSW}"
+									sh "PROFILE=ci,all-dbs,h2-2 ci/test.sh"
+									sh "ci/clean.sh"
+								}
+							}
+						}
+					}
+				}
+
 				stage("test: baseline (jdk11)") {
 					agent {
 						label 'data'
