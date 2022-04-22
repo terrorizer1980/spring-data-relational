@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -359,6 +360,25 @@ class JdbcAggregateTemplateIntegrationTests {
 		assertThat(template.findAll(Manual.class)).isEmpty();
 
 		softly.assertAll();
+	}
+
+	@Test
+	void saveAndDeleteAllByAggregateRootsWithVersion() {
+		AggregateWithImmutableVersion aggregate1 = new AggregateWithImmutableVersion(null, null);
+		AggregateWithImmutableVersion aggregate2 = new AggregateWithImmutableVersion(null, null);
+		AggregateWithImmutableVersion aggregate3 = new AggregateWithImmutableVersion(null, null);
+		Iterator<AggregateWithImmutableVersion> savedAggregatesIterator = template
+				.saveAll(List.of(aggregate1, aggregate2, aggregate3)).iterator();
+		AggregateWithImmutableVersion savedAggregate1 = savedAggregatesIterator.next();
+		AggregateWithImmutableVersion twiceSavedAggregate2 = template.save(savedAggregatesIterator.next());
+		AggregateWithImmutableVersion twiceSavedAggregate3 = template.save(savedAggregatesIterator.next());
+
+		assertThat(template.count(AggregateWithImmutableVersion.class)).isEqualTo(3);
+
+		template.deleteAll(List.of(savedAggregate1, twiceSavedAggregate2, twiceSavedAggregate3),
+				AggregateWithImmutableVersion.class);
+
+		assertThat(template.count(AggregateWithImmutableVersion.class)).isEqualTo(0);
 	}
 
 	@Test // DATAJDBC-112

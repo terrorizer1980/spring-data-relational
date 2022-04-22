@@ -27,7 +27,7 @@ public class DeleteBatchingAggregateChange<T> implements BatchingAggregateChange
 			Comparator.comparing(PersistentPropertyPath::getLength);
 
 	private final Class<T> entityType;
-	private final List<DbAction.DeleteRoot<T>> rootActions = new ArrayList<>();
+	private final Map<Number, List<DbAction.DeleteRoot<T>>> rootActions = new HashMap<>();
 	private final List<DbAction.AcquireLockRoot<?>> lockActions = new ArrayList<>();
 	private final Map<PersistentPropertyPath<RelationalPersistentProperty>, List<DbAction.Delete<Object>>> deleteActions = //
 			new HashMap<>();
@@ -59,7 +59,14 @@ public class DeleteBatchingAggregateChange<T> implements BatchingAggregateChange
 						deletes.forEach(consumer);
 					}
 				});
-		rootActions.forEach(consumer);
+		rootActions.forEach((previousVersion, deleteRoots) -> {
+			if (deleteRoots.size() > 1) {
+				consumer.accept(previousVersion != null ? new DbAction.BatchDeleteRootWithVersion<>(deleteRoots)
+						: new DbAction.BatchDeleteRoot<>(deleteRoots));
+			} else {
+				deleteRoots.forEach(consumer);
+			}
+		});
 	}
 
 	@Override
@@ -67,8 +74,8 @@ public class DeleteBatchingAggregateChange<T> implements BatchingAggregateChange
 
 		aggregateChange.forEachAction(action -> {
 			if (action instanceof DbAction.DeleteRoot<?> deleteRootAction) {
-				//noinspection unchecked
-				rootActions.add((DbAction.DeleteRoot<T>) deleteRootAction);
+				// noinspection unchecked
+				addDeleteRoot((DbAction.DeleteRoot<T>) deleteRootAction);
 			} else if (action instanceof DbAction.Delete<?> deleteAction) {
 				// noinspection unchecked
 				addDelete((DbAction.Delete<Object>) deleteAction);
@@ -82,6 +89,15 @@ public class DeleteBatchingAggregateChange<T> implements BatchingAggregateChange
 
 		PersistentPropertyPath<RelationalPersistentProperty> propertyPath = action.getPropertyPath();
 		deleteActions.merge(propertyPath, new ArrayList<>(singletonList(action)), (actions, defaultValue) -> {
+			actions.add(action);
+			return actions;
+		});
+	}
+
+	private void addDeleteRoot(DbAction.DeleteRoot<T> action) {
+
+		Number previousVersion = action.getPreviousVersion();
+		rootActions.merge(previousVersion, new ArrayList<>(singletonList(action)), (actions, defaultValue) -> {
 			actions.add(action);
 			return actions;
 		});
